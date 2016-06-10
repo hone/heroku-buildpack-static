@@ -14,7 +14,7 @@ RSpec.describe "Simple" do
     app.destroy
   end
 
-  let(:app)  { AppRunner.new(name, env, @debug) }
+  let(:app)  { AppRunner.new(name, env, @debug, ENV['CIRCLECI']) }
 
   let(:name) { "hello_world" }
   let(:env)  { Hash.new }
@@ -550,5 +550,117 @@ STATIC_JSON
         end
       end
     end
+  end
+
+  describe "env vars" do
+    let(:env)  do
+      {
+        "SECRET"            => "OMG",
+        "HEROKU_STATIC_FOO" => "f00",
+        "HEROKU_STATIC_BAR" => "b4r"
+      }
+    end
+
+    context "simple" do
+      context "env.js" do
+        let(:name) { "env_vars" }
+
+        it "should setup envs accessible to the frontend app" do
+          response = app.get("/--/env.js")
+
+          expect(response.code).to eq("200")
+
+          app.run do
+            app.test_js(name: "env vars get set", num: 3, path: "/index.html", content: <<-JS)
+  test.assertEval(function() {
+    return $('#foo').text() === "#{env["HEROKU_STATIC_FOO"]}"
+  }, "#foo has changed values");
+  test.assertEval(function() {
+    return $('#bar').text() === "#{env["HEROKU_STATIC_BAR"]}"
+  }, "#bar has changed values");
+  test.assertEval(function() {
+    return $('#secret').text() === "Replace Me"
+  }, "#secret has not changed values");
+            JS
+          end
+        end
+      end
+
+      context "env.json" do
+        let(:name) { "env_vars_json" }
+
+        it "should setup envs accessible to the frontend app" do
+          response = app.get("/--/env.json")
+
+          expect(response.code).to eq("200")
+
+          app.run do
+            app.test_js(name: "env vars get set", num: 3, path: "/index.html", content: <<-JS)
+  test.assertEval(function() {
+    return $('#foo').text() === "#{env["HEROKU_STATIC_FOO"]}"
+  }, "#foo has changed values");
+  test.assertEval(function() {
+    return $('#bar').text() === "#{env["HEROKU_STATIC_BAR"]}"
+  }, "#bar has changed values");
+  test.assertEval(function() {
+    return $('#secret').text() === "Replace Me"
+  }, "#secret has not changed values");
+            JS
+          end
+        end
+      end
+    end
+
+    context "custom routes" do
+      context "env.js" do
+        let(:name) { "env_vars_custom_routes" }
+
+        it "should setup envs accessible to the frontend app" do
+          response = app.get("/--/env.js")
+
+          expect(response.code).to eq("200")
+
+          app.run do
+            app.test_js(name: "env vars get set", num: 3, path: "/foo", content: <<-JS)
+  test.assertEval(function() {
+    return $('#foo').text() === "#{env["HEROKU_STATIC_FOO"]}"
+  }, "#foo has changed values");
+  test.assertEval(function() {
+    return $('#bar').text() === "#{env["HEROKU_STATIC_BAR"]}"
+  }, "#bar has changed values");
+  test.assertEval(function() {
+    return $('#secret').text() === "Replace Me"
+  }, "#secret has not changed values");
+            JS
+          end
+        end
+      end
+
+      context "env.json" do
+        let(:name) { "env_vars_json_custom_routes" }
+
+        it "should setup envs accessible to the frontend app" do
+          response = app.get("/--/env.json")
+
+          expect(response.code).to eq("200")
+
+          app.run do
+            app.test_js(name: "env vars get set", num: 3, path: "/foo", content: <<-JS)
+  test.assertEval(function() {
+    return $('#foo').text() === "#{env["HEROKU_STATIC_FOO"]}"
+  }, "#foo has changed values");
+  test.assertEval(function() {
+    return $('#bar').text() === "#{env["HEROKU_STATIC_BAR"]}"
+  }, "#bar has changed values");
+  test.assertEval(function() {
+    return $('#secret').text() === "Replace Me"
+  }, "#secret has not changed values");
+            JS
+          end
+        end
+      end
+
+    end
+
   end
 end

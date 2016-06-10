@@ -2,6 +2,7 @@ require "uri"
 require "net/http"
 require "fileutils"
 require "json"
+require "tmpdir"
 require "docker"
 require "concurrent/atomic/count_down_latch"
 require_relative "path_helper"
@@ -9,6 +10,10 @@ require_relative "buildpack_builder"
 
 class AppRunner
   include PathHelper
+
+  class CasperJSError < StandardError; end
+
+  PREFIX_PADDING = 8
 
   def self.boot2docker_ip
     %x(boot2docker ip).match(/([0-9]{1,3}\.){3}[0-9]{1,3}/)[0]
@@ -19,9 +24,10 @@ class AppRunner
   HOST_IP        = boot2docker_ip || "127.0.0.1"
   CONTAINER_PORT = "3000"
 
-  def initialize(fixture, env = {}, debug = false)
+  def initialize(fixture, env = {}, debug = false, circleci = false)
     @run       = false
     @debug     = debug
+    @circleci  = circleci
     env.merge!("STATIC_DEBUG" => true) if @debug
 
     @container = Docker::Container.create(
@@ -52,7 +58,7 @@ class AppRunner
     }
     container_thread = Thread.new {
       @container.tap(&:start).attach do |stream, chunk|
-        io_message = "#{stream}: #{chunk}"
+        io_message = "#{"app".ljust(PREFIX_PADDING)} | #{stream}: #{chunk}"
         puts io_message if @debug
         io_stream << io_message if capture_io
         latch.count_down if chunk.include?("Starting nginx...")
@@ -71,6 +77,58 @@ class AppRunner
     container_thread.join
     io_stream.close_write
     @run = false
+  end
+
+  def test_js(name:, num:, path:, content:)
+    uri      = to_uri(path)
+    uri.host = @container.json["NetworkSettings"]["IPAddress"]
+
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        File.write("test.js", <<CONTENT)
+casper.test.begin('#{name}', #{num}, function suite(test) {
+  casper.start("#{uri.to_s}", function() {
+#{content}
+  });
+
+  casper.run(function() {
+    test.done();
+  });
+});
+CONTENT
+      end
+
+      begin
+        test_container = Docker::Container.create(
+          'Image'      => BuildpackBuilder::TAG,
+          'Tty'        => true,
+          'EntryPoint' => "/bin/bash",
+          'OpenStdin'  => true,
+          'HostConfig' => {
+            'Binds' => ["#{dir}:/test"]
+          },
+        )
+        cmd            = ['bash', '-c', 'casperjs test /test/test.js']
+
+        # CircleCI doesn't support docker-exec
+        if @circleci
+          cid = test_container.start.id
+          cmd[2] = "'#{cmd[2]}'" # need to manually escape this for lxc-attach, but breaks in docker-exec
+          IO.popen(%Q{sudo lxc-attach -n "$(docker inspect --format '{{.Id}}' #{cid})" -- #{cmd.join(' ')}}) do |io|
+            print io.read
+          end
+          status = $?
+        else
+          _, _, status = test_container.tap(&:start).exec(cmd) do |stream, chunk|
+            puts "#{"casperjs".ljust(PREFIX_PADDING)} | #{stream}: #{chunk}" if @debug
+          end
+        end
+        raise CasperJSError.new("CasperJS Test Failed with exit status: #{status}") unless status == 0
+      ensure
+        test_container.stop
+      end
+
+    end
   end
 
   def get(path, capture_io = false, max_retries = 30)
@@ -106,5 +164,14 @@ class AppRunner
       retry_count += 1
       retry
     end
+  end
+
+  def to_uri(path)
+    uri = URI(path)
+    uri.host   = HOST_IP   if uri.host.nil?
+    uri.port   = HOST_PORT if (uri.host == HOST_IP && uri.port != HOST_PORT) || uri.port.nil?
+    uri.scheme = "http"    if uri.scheme.nil?
+
+    uri
   end
 end
