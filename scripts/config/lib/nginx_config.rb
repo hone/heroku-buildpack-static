@@ -7,6 +7,7 @@ class NginxConfig
     root: "public_html/",
     encoding: "UTF-8",
     clean_urls: false,
+    directory_listing: false,
     https_only: false,
     basic_auth: false,
     basic_auth_htpasswd_path: "/app/.htpasswd",
@@ -45,6 +46,7 @@ class NginxConfig
     end
 
     json["clean_urls"] ||= DEFAULT[:clean_urls]
+    json["directory_listing"] ||= DEFAULT[:directory_listing]
     json["https_only"] ||= DEFAULT[:https_only]
 
     json["basic_auth"] = true unless ENV['BASIC_AUTH_USERNAME'].nil?
