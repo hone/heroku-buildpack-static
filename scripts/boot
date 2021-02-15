@@ -14,6 +14,7 @@ case $(ulimit -u) in
   export WORKER_CONNECTIONS=2048
   ;;
 esac
+cp $ENV.static.json static.json
 
 "${HERE}/config/make-config"
 
@@ -83,6 +84,11 @@ echo "Starting log redirection..." >&2
     cat "logs/access.log" 1>&2 &
     wait
 ) & pids+=($!)
+
+# print config if env var PRINT_NGINX_CONF is set to true 
+if [ "$PRINT_NGINX_CONF" = "true" ]; then
+    cat config/nginx.conf
+fi
 
 echo "Starting nginx..." >&2
 (
