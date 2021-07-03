@@ -50,6 +50,7 @@ class NginxConfig
 
     json["clean_urls"] ||= DEFAULT[:clean_urls]
     json["https_only"] ||= DEFAULT[:https_only]
+    json["https_only"] ||= !ENV["FORCE_HTTPS"].nil? && ENV["FORCE_HTTPS"] === "true"
 
     json["basic_auth"] = true unless ENV['BASIC_AUTH_USERNAME'].nil?
     json["basic_auth"] ||= DEFAULT[:basic_auth]
