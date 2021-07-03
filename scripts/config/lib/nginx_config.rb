@@ -49,6 +49,9 @@ class NginxConfig
     end
 
     json["clean_urls"] ||= DEFAULT[:clean_urls]
+    
+    # use setting from env if set
+    json["https_only"] = ENV['STATIC_HTTPS_ONLY'] if ENV['STATIC_HTTPS_ONLY']
     json["https_only"] ||= DEFAULT[:https_only]
 
     json["basic_auth"] = true unless ENV['BASIC_AUTH_USERNAME'].nil?
